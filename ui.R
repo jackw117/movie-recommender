@@ -1,33 +1,57 @@
-#
-# This is the user-interface definition of a Shiny web application. You can
-# run the application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
+## ui.R
 library(shiny)
+library(shinydashboard)
+library(recommenderlab)
+library(data.table)
+library(ShinyRatingInput)
+library(shinyjs)
 
-# Define UI for application that draws a histogram
-shinyUI(fluidPage(
+source('functions/helpers.R')
 
-    # Application title
-    titlePanel("Old Faithful Geyser Data"),
+# read in data
+myurl = "https://liangfgithub.github.io/MovieData/"
+movies = readLines(paste0(myurl, 'movies.dat?raw=true'))
+movies = strsplit(movies, split = "::", fixed = TRUE, useBytes = TRUE)
+movies = matrix(unlist(movies), ncol = 3, byrow = TRUE)
+movies = data.frame(movies, stringsAsFactors = FALSE)
+colnames(movies) = c('MovieID', 'Title', 'Genres')
+movies$MovieID = as.integer(movies$MovieID)
+movies$Title = iconv(movies$Title, "latin1", "UTF-8")
 
-    # Sidebar with a slider input for number of bins
-    sidebarLayout(
-        sidebarPanel(
-            sliderInput("bins",
-                        "Number of bins:",
-                        min = 1,
-                        max = 50,
-                        value = 30)
-        ),
+small_image_url = "https://liangfgithub.github.io/MovieImages/"
+movies$image_url = sapply(movies$MovieID, 
+                          function(x) paste0(small_image_url, x, '.jpg?raw=true'))
 
-        # Show a plot of the generated distribution
-        mainPanel(
-            plotOutput("distPlot")
+movie.genres = strsplit(movies$Genres, split = "|", fixed = TRUE, useBytes = TRUE)
+unique.genre.combos = unique(movie.genres)
+unique.genre = sort(unique(unlist(movie.genres)))
+
+shinyUI(
+    dashboardPage(
+        skin = "blue",
+        dashboardHeader(title = "Movie Recommender"),
+        
+        dashboardSidebar(disable = TRUE),
+        
+        dashboardBody(includeCSS("css/movies.css"),
+                      fluidRow(
+                          box(width = 12, title = "Select your favorite movie genre", status = "info", solidHeader = TRUE, collapsible = TRUE,
+                              selectInput("fav", "Genre:", choices = unique.genre)
+                          )
+                      ),
+                      fluidRow(
+                          useShinyjs(),
+                          box(
+                              width = 12, status = "info", solidHeader = TRUE,
+                              title = "Step 2: Discover movies you might like",
+                              br(),
+                              withBusyIndicatorUI(
+                                  actionButton("btn", "Click here to get your recommendations", class = "btn-warning")
+                              ),
+                              br(),
+                              tableOutput("results")
+                          )
+                      )
         )
     )
-))
+) 
