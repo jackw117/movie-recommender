@@ -28,15 +28,14 @@ get_user_ratings = function(value_list) {
 }
 
 # ratings
-ratings = read.csv('ratings.dat', 
+ratings = read.csv('data/ratings.dat', 
                    sep = ':',
                    colClasses = c('integer', 'NULL'), 
                    header = FALSE)
 colnames(ratings) = c('UserID', 'MovieID', 'Rating', 'Timestamp')
 
 # read in data
-myurl = "https://liangfgithub.github.io/MovieData/"
-movies = readLines(paste0(myurl, 'movies.dat?raw=true'))
+movies = readLines('data/movies.dat')
 movies = strsplit(movies, split = "::", fixed = TRUE, useBytes = TRUE)
 movies = matrix(unlist(movies), ncol = 3, byrow = TRUE)
 movies = data.frame(movies, stringsAsFactors = FALSE)
@@ -48,13 +47,35 @@ small_image_url = "https://liangfgithub.github.io/MovieImages/"
 movies$image_url = sapply(movies$MovieID, 
                           function(x) paste0(small_image_url, x, '.jpg?raw=true'))
 
-movie.genres = strsplit(movies$Genres, split = "|", fixed = TRUE, useBytes = TRUE)
-unique.genre.combos = unique(movie.genres)
-unique.genre = sort(unique(unlist(movie.genres)))
+# movie.genres = strsplit(movies$Genres, split = "|", fixed = TRUE, useBytes = TRUE)
+# unique.genre.combos = unique(movie.genres)
+# unique.genre = sort(unique(unlist(movie.genres)))
 
+tmp = ratings %>% 
+    group_by(MovieID) %>% 
+    summarize(ratings_per_movie = n(), ave_ratings = mean(Rating)) %>%
+    inner_join(movies, by = 'MovieID')
+
+top.100 = tmp %>% arrange(desc(ratings_per_movie))
+top.100 = top.100[1:100,]
+
+# top.movies.all = tmp %>% filter(ratings_per_movie >= 100) %>% arrange(desc(ave_ratings))
+# top.movies.popular = tmp %>% filter(ratings_per_movie >= 1000) %>% arrange(desc(ave_ratings))
+# top.movies.high = tmp %>% filter(ratings_per_movie >= 500) %>% filter(ratings_per_movie < 1000) %>% arrange(desc(ave_ratings))
+# top.movies.mid = tmp %>% filter(ratings_per_movie >= 300) %>% filter(ratings_per_movie < 500) %>% arrange(desc(ave_ratings))
+# top.movies.low = tmp %>% filter(ratings_per_movie >= 200) %>% filter(ratings_per_movie < 300) %>% arrange(desc(ave_ratings))
+# top.movies.verylow = tmp %>% filter(ratings_per_movie >= 100) %>% filter(ratings_per_movie < 200) %>% arrange(desc(ave_ratings))
+# popularities.list = list("All"=top.movies.all, "Highest"=top.movies.popular, "High"=top.movies.high, "Medium"=top.movies.mid, "Low"=top.movies.low, "Very Low"=top.movies.verylow)
+
+m = top.100[[100,'ratings_per_movie']]
+C = sum(tmp$ave_ratings) / nrow(tmp)
+tmp$ave_ratings = ((tmp$ave_ratings * tmp$ratings_per_movie) + (C * m)) / (tmp$ratings_per_movie + m)
+top.weighted = tmp %>% arrange(desc(ave_ratings))
+
+top.rated = tmp %>% arrange(desc(ratings_per_movie))
 
 # users
-users = read.csv('users.dat',
+users = read.csv('data/users.dat',
                  sep = ':', header = FALSE)
 users = users[, -c(2,4,6,8)] # skip columns
 colnames(users) = c('UserID', 'Gender', 'Age', 'Occupation', 'Zip-code')
@@ -69,10 +90,9 @@ shinyServer(function(input, output, session) {
         lapply(1:num_rows, function(i) {
             list(fluidRow(lapply(1:num_movies, function(j) {
                 list(box(width = 2,
-                         div(style = "text-align:center", img(src = movies$image_url[(i - 1) * num_movies + j], height = 150)),
-                         #div(style = "text-align:center; color: #999999; font-size: 80%", books$authors[(i - 1) * num_books + j]),
-                         div(style = "text-align:center", strong(movies$Title[(i - 1) * num_movies + j])),
-                         div(style = "text-align:center; font-size: 150%; color: #f0ad4e;", ratingInput(paste0("select_", movies$MovieID[(i - 1) * num_movies + j]), label = "", dataStop = 5)))) #00c0ef
+                         div(style = "text-align:center", img(src = top.rated$image_url[(i - 1) * num_movies + j], height = 150)),
+                         div(style = "text-align:center", strong(top.rated$Title[(i - 1) * num_movies + j])),
+                         div(style = "text-align:center; font-size: 150%; color: #f0ad4e;", ratingInput(paste0("select_", top.rated$MovieID[(i - 1) * num_movies + j]), label = "", dataStop = 5)))) #00c0ef
             })))
         })
     })
@@ -88,7 +108,8 @@ shinyServer(function(input, output, session) {
             # get the user's rating data
             value_list <- reactiveValuesToList(input)
             user_ratings <- get_user_ratings(value_list)
-            user.genre <- filter(movies, grepl(value_list$fav, Genres));
+            recommendation.list = top.weighted
+            user.genre <- filter(recommendation.list, grepl(value_list$fav, Genres))
             
             user_results = (1:10)/10
             user_predicted_ids = 1:10
@@ -107,7 +128,7 @@ shinyServer(function(input, output, session) {
         num_rows <- 2
         num_movies <- 5
         recom_result <- df()
-        
+
         lapply(1:num_rows, function(i) {
             list(fluidRow(lapply(1:num_movies, function(j) {
                 box(width = 2, status = "success", solidHeader = TRUE, title = paste0("Rank ", (i - 1) * num_movies + j),
