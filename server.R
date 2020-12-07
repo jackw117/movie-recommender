@@ -25,6 +25,11 @@ get_user_ratings = function(value_list) {
     dat[Rating == " ", Rating := 0]
     dat[, ':=' (MovieID = as.numeric(MovieID), Rating = as.numeric(Rating))]
     dat = dat[Rating > 0]
+    
+    # user_ratings <- sparseMatrix(i = dat$MovieID, 
+    #                              j = rep(1,nrow(dat)), 
+    #                              x = dat$Rating, 
+    #                              dims = c(nrow(ratingmat), 1))
 }
 
 # ratings
@@ -47,9 +52,9 @@ small_image_url = "https://liangfgithub.github.io/MovieImages/"
 movies$image_url = sapply(movies$MovieID, 
                           function(x) paste0(small_image_url, x, '.jpg?raw=true'))
 
-# movie.genres = strsplit(movies$Genres, split = "|", fixed = TRUE, useBytes = TRUE)
-# unique.genre.combos = unique(movie.genres)
-# unique.genre = sort(unique(unlist(movie.genres)))
+movie.genres = strsplit(movies$Genres, split = "|", fixed = TRUE, useBytes = TRUE)
+unique.genre.combos = unique(movie.genres)
+unique.genre = sort(unique(unlist(movie.genres)))
 
 tmp = ratings %>% 
     group_by(MovieID) %>% 
@@ -58,14 +63,6 @@ tmp = ratings %>%
 
 top.100 = tmp %>% arrange(desc(ratings_per_movie))
 top.100 = top.100[1:100,]
-
-# top.movies.all = tmp %>% filter(ratings_per_movie >= 100) %>% arrange(desc(ave_ratings))
-# top.movies.popular = tmp %>% filter(ratings_per_movie >= 1000) %>% arrange(desc(ave_ratings))
-# top.movies.high = tmp %>% filter(ratings_per_movie >= 500) %>% filter(ratings_per_movie < 1000) %>% arrange(desc(ave_ratings))
-# top.movies.mid = tmp %>% filter(ratings_per_movie >= 300) %>% filter(ratings_per_movie < 500) %>% arrange(desc(ave_ratings))
-# top.movies.low = tmp %>% filter(ratings_per_movie >= 200) %>% filter(ratings_per_movie < 300) %>% arrange(desc(ave_ratings))
-# top.movies.verylow = tmp %>% filter(ratings_per_movie >= 100) %>% filter(ratings_per_movie < 200) %>% arrange(desc(ave_ratings))
-# popularities.list = list("All"=top.movies.all, "Highest"=top.movies.popular, "High"=top.movies.high, "Medium"=top.movies.mid, "Low"=top.movies.low, "Very Low"=top.movies.verylow)
 
 m = top.100[[100,'ratings_per_movie']]
 C = sum(tmp$ave_ratings) / nrow(tmp)
@@ -80,7 +77,39 @@ users = read.csv('data/users.dat',
 users = users[, -c(2,4,6,8)] # skip columns
 colnames(users) = c('UserID', 'Gender', 'Age', 'Occupation', 'Zip-code')
 
+genre_list <- c("Action", "Adventure", "Animation", "Children", "Comedy", "Crime","Documentary", "Drama", "Fantasy","Film-Noir", "Horror", "Musical", "Mystery","Romance","Sci-Fi", "Thriller", "War", "Western")
+
+load(file = "binary_ratings.Rdata")
+load(file = "genre_matrix.Rdata")
+
+# ratingmat <- sparseMatrix(ratings$UserID, ratings$MovieID, x=ratings$Rating)
+# dimnames(ratingmat) <- list(UserID = as.character(sort(unique(ratings$UserID))), MovieID = as.character(1:3952))
+# rm = as(ratingmat, "realRatingMatrix")
+# 
+# # Creation of the model - U(ser) B(ased) C(ollaborative) F(iltering)
+# Rec.model<-Recommender(rm[1:6040], method = "UBCF")
+# 
+# recommended.items.1 <- predict(Rec.model, rm[1,], n=10)
+# # to display them
+# top.10.recommended = as(recommended.items.1, "list")
+# # to obtain the top 3
+# recommended.items.1.top3 <- bestN(recommended.items.1, n = 3)
+# # to display them
+# as(recommended.items.1.top3, "list")
+# 
+# movies.indices = which(movies$MovieID %in% as.numeric(top.10.recommended[[1]]))
+# 
+# ratingmat <- sparseMatrix(ratings$MovieID, ratings$UserID, x=ratings$Rating) # book x user matrix
+# ratingmat <- ratingmat[, unique(summary(ratingmat)$j)] # remove users with no ratings
+
+
+new.user.id = nrow(users) + 1
+
 shinyServer(function(input, output, session) {
+    
+    output$genres <- renderUI({
+        selectInput("fav", "Genre:", choices = unique.genre)
+    })
     
     # show the books to be rated
     output$ratings <- renderUI({
@@ -100,14 +129,8 @@ shinyServer(function(input, output, session) {
     # Calculate recommendations when the sbumbutton is clicked
     df <- eventReactive(input$btn, {
         withBusyIndicatorServer("btn", { # showing the busy indicator
-            # hide the rating container
-            useShinyjs()
-            jsCode <- "document.querySelector('[data-widget=collapse]').click();"
-            runjs(jsCode)
-            
             # get the user's rating data
             value_list <- reactiveValuesToList(input)
-            user_ratings <- get_user_ratings(value_list)
             recommendation.list = top.weighted
             user.genre <- filter(recommendation.list, grepl(value_list$fav, Genres))
             
@@ -122,6 +145,56 @@ shinyServer(function(input, output, session) {
         
     }) # clicked on button
     
+    df2 <- eventReactive(input$btn2, {
+        withBusyIndicatorServer("btn2", { # showing the busy indicator
+            # get the user's rating data
+            value_list <- reactiveValuesToList(input)
+            user_ratings <- get_user_ratings(value_list)
+            ###### replace with calculated new user id
+            user_ratings = cbind(rep(new.user.id, nrow(user_ratings)), user_ratings)
+            user_ratings = cbind(user_ratings, rep(0, nrow(user_ratings)))
+            colnames(user_ratings)[1] = "UserID"
+            colnames(user_ratings)[4] = "Timestamp"
+            rmat = ratings
+            rmat = rbind(rmat, user_ratings)
+            
+            ratingmat <- sparseMatrix(rmat$UserID, rmat$MovieID, x=rmat$Rating)
+            dimnames(ratingmat) <- list(UserID = as.character(sort(unique(rmat$UserID))), MovieID = as.character(1:3952))
+            rm = as(ratingmat, "realRatingMatrix")
+            
+            Rec.model<-Recommender(rm[1:6041], method = "UBCF")
+            
+            recommended.items <- predict(Rec.model, rm[new.user.id,], n=10)
+            top.10.recommended = as(recommended.items, "list")
+            movies.indices = which(movies$MovieID %in% as.numeric(top.10.recommended[[1]]))
+            
+            recom_results <- data.table(Rank = 1:10,
+                                        MovieID = movies.indices,
+                                        Title = movies$Title[movies.indices],
+                                        Predicted_rating =  0)
+        })
+    })
+    
+    output$recommendations <- renderUI({
+        num_rows <- 2
+        num_movies <- 5
+        recom_result <- df2()
+        
+        lapply(1:num_rows, function(i) {
+            list(fluidRow(lapply(1:num_movies, function(j) {
+                box(width = 2, status = "success", solidHeader = TRUE, title = paste0("Rank ", (i - 1) * num_movies + j),
+                    
+                    div(style = "text-align:center", 
+                        a(img(src = movies[which(movies$MovieID == recom_result$MovieID[(i - 1) * num_movies + j]),]$image_url, height = 150))
+                    ),
+                    div(style="text-align:center; font-size: 100%", 
+                        strong(movies[which(movies$MovieID == recom_result$MovieID[(i - 1) * num_movies + j]),]$Title)
+                    )
+                    
+                )        
+            }))) # columns
+        }) # rows
+    })
     
     # display the recommendations
     output$results <- renderUI({

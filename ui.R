@@ -27,11 +27,10 @@ shinyUI(
               tabItem("s1",
                   fluidRow(
                       box(width = 12, title = "Select your favorite movie genre", status = "info", solidHeader = TRUE,
-                          selectInput("fav", "Genre:", choices = unique.genre)
+                          uiOutput('genres')
                       )
                   ),
                   fluidRow(
-                      useShinyjs(),
                       box(
                           width = 12, status = "info", solidHeader = TRUE,
                           title = "Step 2: Discover movies you might like",
@@ -59,7 +58,7 @@ shinyUI(
                           title = "Step 2: Discover books you might like",
                           br(),
                           withBusyIndicatorUI(
-                              actionButton("btn", "Click here to get your recommendations", class = "btn-warning")
+                              actionButton("btn2", "Click here to get your recommendations", class = "btn-warning")
                           ),
                           br(),
                           tableOutput("recommendations")
