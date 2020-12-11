@@ -55,7 +55,7 @@ shinyUI(
                       useShinyjs(),
                       box(
                           width = 12, status = "info", solidHeader = TRUE,
-                          title = "Step 2: Discover books you might like",
+                          title = "Step 2: Discover movies you might like",
                           br(),
                           withBusyIndicatorUI(
                               actionButton("btn2", "Click here to get your recommendations", class = "btn-warning")

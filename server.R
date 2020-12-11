@@ -25,11 +25,6 @@ get_user_ratings = function(value_list) {
     dat[Rating == " ", Rating := 0]
     dat[, ':=' (MovieID = as.numeric(MovieID), Rating = as.numeric(Rating))]
     dat = dat[Rating > 0]
-    
-    # user_ratings <- sparseMatrix(i = dat$MovieID, 
-    #                              j = rep(1,nrow(dat)), 
-    #                              x = dat$Rating, 
-    #                              dims = c(nrow(ratingmat), 1))
 }
 
 # ratings
@@ -79,36 +74,12 @@ colnames(users) = c('UserID', 'Gender', 'Age', 'Occupation', 'Zip-code')
 
 genre_list <- c("Action", "Adventure", "Animation", "Children", "Comedy", "Crime","Documentary", "Drama", "Fantasy","Film-Noir", "Horror", "Musical", "Mystery","Romance","Sci-Fi", "Thriller", "War", "Western")
 
-load(file = "binary_ratings.Rdata")
-load(file = "genre_matrix.Rdata")
-
-# ratingmat <- sparseMatrix(ratings$UserID, ratings$MovieID, x=ratings$Rating)
-# dimnames(ratingmat) <- list(UserID = as.character(sort(unique(ratings$UserID))), MovieID = as.character(1:3952))
-# rm = as(ratingmat, "realRatingMatrix")
-# 
-# # Creation of the model - U(ser) B(ased) C(ollaborative) F(iltering)
-# Rec.model<-Recommender(rm[1:6040], method = "UBCF")
-# 
-# recommended.items.1 <- predict(Rec.model, rm[1,], n=10)
-# # to display them
-# top.10.recommended = as(recommended.items.1, "list")
-# # to obtain the top 3
-# recommended.items.1.top3 <- bestN(recommended.items.1, n = 3)
-# # to display them
-# as(recommended.items.1.top3, "list")
-# 
-# movies.indices = which(movies$MovieID %in% as.numeric(top.10.recommended[[1]]))
-# 
-# ratingmat <- sparseMatrix(ratings$MovieID, ratings$UserID, x=ratings$Rating) # book x user matrix
-# ratingmat <- ratingmat[, unique(summary(ratingmat)$j)] # remove users with no ratings
-
-
 new.user.id = nrow(users) + 1
 
 shinyServer(function(input, output, session) {
     
     output$genres <- renderUI({
-        selectInput("fav", "Genre:", choices = unique.genre)
+        selectInput("fav", "Genre:", choices = genre_list)
     })
     
     # show the books to be rated
@@ -150,7 +121,6 @@ shinyServer(function(input, output, session) {
             # get the user's rating data
             value_list <- reactiveValuesToList(input)
             user_ratings <- get_user_ratings(value_list)
-            ###### replace with calculated new user id
             user_ratings = cbind(rep(new.user.id, nrow(user_ratings)), user_ratings)
             user_ratings = cbind(user_ratings, rep(0, nrow(user_ratings)))
             colnames(user_ratings)[1] = "UserID"
@@ -162,11 +132,17 @@ shinyServer(function(input, output, session) {
             dimnames(ratingmat) <- list(UserID = as.character(sort(unique(rmat$UserID))), MovieID = as.character(1:3952))
             rm = as(ratingmat, "realRatingMatrix")
             
-            Rec.model<-Recommender(rm[1:6041], method = "UBCF")
+            Rec.model<-Recommender(rm[1:2500], method = "UBCF")
             
             recommended.items <- predict(Rec.model, rm[new.user.id,], n=10)
             top.10.recommended = as(recommended.items, "list")
             movies.indices = which(movies$MovieID %in% as.numeric(top.10.recommended[[1]]))
+            
+            #
+            # don't use top 10 recommended
+            # calculate it manually
+            # predict all, then figure out the top 10 with the most ratings (for tie breakers)
+            #
             
             recom_results <- data.table(Rank = 1:10,
                                         MovieID = movies.indices,
@@ -185,10 +161,10 @@ shinyServer(function(input, output, session) {
                 box(width = 2, status = "success", solidHeader = TRUE, title = paste0("Rank ", (i - 1) * num_movies + j),
                     
                     div(style = "text-align:center", 
-                        a(img(src = movies[which(movies$MovieID == recom_result$MovieID[(i - 1) * num_movies + j]),]$image_url, height = 150))
+                        a(img(src = movies[recom_result$MovieID[(i - 1) * num_movies + j],]$image_url, height = 150))
                     ),
                     div(style="text-align:center; font-size: 100%", 
-                        strong(movies[which(movies$MovieID == recom_result$MovieID[(i - 1) * num_movies + j]),]$Title)
+                        strong(movies[recom_result$MovieID[(i - 1) * num_movies + j],]$Title)
                     )
                     
                 )        
