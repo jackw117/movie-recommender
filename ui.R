@@ -1,3 +1,6 @@
+# I use the project here as a template for my app: https://github.com/pspachtholz/BookRecommender
+# as well as the code here: https://liangfgithub.github.io/Rcode_W13_Movie_RS.nb.html
+
 ## ui.R
 library(shiny)
 library(shinydashboard)

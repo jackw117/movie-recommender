@@ -7,6 +7,9 @@
 #    http://shiny.rstudio.com/
 #
 
+# I use the project here as a template for my app: https://github.com/pspachtholz/BookRecommender
+# as well as the code here: https://liangfgithub.github.io/Rcode_W13_Movie_RS.nb.html
+
 library(shiny)
 library(dplyr)
 library(ggplot2)
@@ -15,7 +18,7 @@ library(DT)
 library(data.table)
 library(reshape2)
 
-setwd("/home/jack/Documents/CS598/Project4/")
+myurl = "https://liangfgithub.github.io/MovieData/"
 
 get_user_ratings = function(value_list) {
     dat = data.table(MovieID = sapply(strsplit(names(value_list), "_"), 
@@ -28,14 +31,14 @@ get_user_ratings = function(value_list) {
 }
 
 # ratings
-ratings = read.csv('data/ratings.dat', 
+ratings = read.csv(paste0(myurl, 'ratings.dat?raw=true'), 
                    sep = ':',
                    colClasses = c('integer', 'NULL'), 
                    header = FALSE)
 colnames(ratings) = c('UserID', 'MovieID', 'Rating', 'Timestamp')
 
 # read in data
-movies = readLines('data/movies.dat')
+movies = readLines(paste0(myurl, 'movies.dat?raw=true'))
 movies = strsplit(movies, split = "::", fixed = TRUE, useBytes = TRUE)
 movies = matrix(unlist(movies), ncol = 3, byrow = TRUE)
 movies = data.frame(movies, stringsAsFactors = FALSE)
@@ -67,12 +70,18 @@ top.weighted = tmp %>% arrange(desc(ave_ratings))
 top.rated = tmp %>% arrange(desc(ratings_per_movie))
 
 # users
-users = read.csv('data/users.dat',
+users = read.csv(paste0(myurl, 'users.dat?raw=true'),
                  sep = ':', header = FALSE)
 users = users[, -c(2,4,6,8)] # skip columns
 colnames(users) = c('UserID', 'Gender', 'Age', 'Occupation', 'Zip-code')
 
 genre_list <- c("Action", "Adventure", "Animation", "Children", "Comedy", "Crime","Documentary", "Drama", "Fantasy","Film-Noir", "Horror", "Musical", "Mystery","Romance","Sci-Fi", "Thriller", "War", "Western")
+
+ratingmat <- sparseMatrix(ratings$UserID, ratings$MovieID, x=ratings$Rating)
+dimnames(ratingmat) <- list(UserID = as.character(sort(unique(ratings$UserID))), MovieID = as.character(1:3952))
+rm = as(ratingmat, "realRatingMatrix")
+
+Rec.model<-Recommender(rm[1:6040], method = "UBCF")
 
 new.user.id = nrow(users) + 1
 
@@ -132,17 +141,9 @@ shinyServer(function(input, output, session) {
             dimnames(ratingmat) <- list(UserID = as.character(sort(unique(rmat$UserID))), MovieID = as.character(1:3952))
             rm = as(ratingmat, "realRatingMatrix")
             
-            Rec.model<-Recommender(rm[1:2500], method = "UBCF")
-            
             recommended.items <- predict(Rec.model, rm[new.user.id,], n=10)
             top.10.recommended = as(recommended.items, "list")
             movies.indices = which(movies$MovieID %in% as.numeric(top.10.recommended[[1]]))
-            
-            #
-            # don't use top 10 recommended
-            # calculate it manually
-            # predict all, then figure out the top 10 with the most ratings (for tie breakers)
-            #
             
             recom_results <- data.table(Rank = 1:10,
                                         MovieID = movies.indices,
